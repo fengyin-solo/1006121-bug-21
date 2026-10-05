@@ -28,11 +28,34 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
   return { items: matched, total: matched.length, page: 1, size: matched.length }
 }
 
+/**
+ * 读取统一走这里：取不到数据时自动重试若干次，仍失败才抛出，由页面提示「重试取数」。
+ * 任何情况下都不会拿 seed 或上一版顶回来（local-store 已保证）。
+ */
+export async function readWithRetry<T>(read: () => T, retries = 2): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return read()
+    } catch (error) {
+      lastError = error
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('取数失败')
+}
+
 export function runAction(key: string, id: number, action: string): ActionResult {
   const meta = moduleMeta(key)
   const target = meta.actionTargets[action]
   if (!target) {
     return { ok: false, message: `${meta.entity}没有登记「${action}」这个动作` }
+  }
+  // 演练登记整改必须走整笔事务入口，禁止从通用状态机只改状态（旧的双写根因）。
+  if (key === 'drill' && action === '登记整改') {
+    return { ok: false, message: '登记整改必须在整改窗口一次填全后整笔提交，不能只改状态' }
   }
   const rows = listRows(key)
   const index = rows.findIndex((row) => Number(row.id) === id)
@@ -43,12 +66,22 @@ export function runAction(key: string, id: number, action: string): ActionResult
   if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
   }
+  // 越级拦截：只允许从上一状态推进到目标状态，跳状态一律拦下。
+  const targetIndex = meta.statuses.indexOf(target)
+  const expectedPrev = targetIndex > 0 ? meta.statuses[targetIndex - 1] : undefined
+  const isNegative = NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb))
+  if (expectedPrev && current !== expectedPrev && !isNegative) {
+    return {
+      ok: false,
+      message: `已拦在「状态流转」环：${meta.entity}当前为「${current}」，须先流转到「${expectedPrev}」才能执行「${action}」，越级提交一律不认`,
+    }
+  }
   const lastStatus = meta.statuses[meta.statuses.length - 1]
   const updated: EntryRow = {
     ...rows[index],
     status: target,
     pending: target !== lastStatus,
-    abnormal: NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb)),
+    abnormal: isNegative,
   }
   const next = [...rows]
   next[index] = updated
