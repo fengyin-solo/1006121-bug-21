@@ -80,7 +80,9 @@ import {
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import { useSessionStore } from '@/stores/session'
 
+const session = useSessionStore()
 const meta = moduleMeta('ring')
 const columns = ["环号", "起始里程", "掘进速度", "总推力", "刀盘扭矩", "出土方量", "掘进班组", "环次状态"]
 const actions = ["开始掘进", "确认完成", "申请纠偏"]
@@ -114,7 +116,7 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  const result = applyAction(meta.key, Number(row.id), action, session.role)
   if (!result.ok) {
     errorMessage.value = result.message
     return

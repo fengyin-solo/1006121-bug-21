@@ -80,7 +80,9 @@ import {
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import { useSessionStore } from '@/stores/session'
 
+const session = useSessionStore()
 const meta = moduleMeta('building')
 const columns = ["对象编号", "建筑物名称", "结构类型", "距隧道距离", "允许沉降", "实测沉降", "监测频次", "监测状态"]
 const actions = ["布设测点", "发布报警", "解除报警"]
@@ -114,7 +116,7 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  const result = applyAction(meta.key, Number(row.id), action, session.role)
   if (!result.ok) {
     errorMessage.value = result.message
     return

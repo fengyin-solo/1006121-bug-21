@@ -80,7 +80,9 @@ import {
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import { useSessionStore } from '@/stores/session'
 
+const session = useSessionStore()
 const meta = moduleMeta('testing')
 const columns = ["委托编号", "试样类型", "检测项目", "送样日期", "检测结果", "报告编号", "检测机构", "委托状态"]
 const actions = ["送样委托", "出具报告", "登记不合格"]
@@ -114,7 +116,7 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  const result = applyAction(meta.key, Number(row.id), action, session.role)
   if (!result.ok) {
     errorMessage.value = result.message
     return
